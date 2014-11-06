@@ -59,6 +59,24 @@ class ProtocolParser(object):
         self._terminate_current_token()
         return data.lstrip(b'\t ')
 
+    def parse_target(self, data):
+        """
+        Parse the `target`_ from a request line.
+
+        :param bytes data:
+        :return: the bytes remaining in ``data`` after parsing
+
+        Note that this method **DOES NOT** validate that the target
+        is a URL.  It simply parses the token containing characters
+        that are valid within a URL.
+
+        .. _target: http://tools.ietf.org/html/rfc7230#appendix-B
+
+        """
+        remaining = data.lstrip(URI_CHARS)
+        self._consume(data, len(data) - len(remaining))
+        return remaining
+
     @property
     def tokens(self):
         return [t for t in self._tokens if t != SENTINEL_TOKEN]

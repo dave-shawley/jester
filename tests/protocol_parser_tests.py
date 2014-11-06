@@ -25,3 +25,21 @@ class WhenParsingTokens(unittest.TestCase):
         buffer = self.parser.parse_token(buffer)
         self.assertEqual(buffer, b'')
         self.assertEqual(self.parser.tokens, [b'onetwo', b'three'])
+
+
+class WhenParsingRequestTarget(unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.parser = parsing.ProtocolParser()
+
+    def test_that_parsing_terminates_at_space(self):
+        buffer = b'whatever-you%C2%ABwant%C2%BB left-over'
+        buffer = self.parser.parse_target(buffer)
+        self.assertEqual(buffer, b' left-over')
+        self.assertEqual(self.parser.tokens, [b'whatever-you%C2%ABwant%C2%BB'])
+
+    def test_that_parsing_terminates_at_nonascii_character(self):
+        buffer = b'valid-target\xC2\xABnext token'
+        buffer = self.parser.parse_target(buffer)
+        self.assertEqual(buffer, b'\xC2\xABnext token')
