@@ -1,7 +1,8 @@
 .. include:: ../README.rst
 
+Documentation
+=============
 .. toctree::
-   :hidden:
 
    hacking
    changelog
