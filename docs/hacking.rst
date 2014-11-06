@@ -45,7 +45,7 @@ test, document, and generally hack on the code base.
 .. code-block:: sh
 
    $ pyvenv env
-   $ env/bin/pip install -r dev-requirments.txt
+   $ env/bin/pip install -r dev-requirements.txt
 
 Running Tests
 ~~~~~~~~~~~~~
