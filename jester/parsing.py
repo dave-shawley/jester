@@ -1,3 +1,6 @@
+from . import errors
+
+
 URI_CHARS = (b":/?#[]@!$&'()*+,;=0123456789-._~%"
              b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 """Bytes that are valid in the *request-target* production."""
@@ -32,6 +35,7 @@ class ProtocolParser(object):
     def __init__(self):
         super().__init__()
         self._tokens = [SENTINEL_TOKEN]
+        self.version = None
 
     def parse_token(self, data):
         """
@@ -63,7 +67,7 @@ class ProtocolParser(object):
         """
         Parse the `target`_ from a request line.
 
-        :param bytes data:
+        :param bytes data: buffer to parse
         :return: the bytes remaining in ``data`` after parsing
 
         Note that this method **DOES NOT** validate that the target
@@ -76,6 +80,34 @@ class ProtocolParser(object):
         remaining = data.lstrip(URI_CHARS)
         self._consume(data, len(data) - len(remaining))
         return remaining
+
+    def parse_version(self, data):
+        """
+        Parse an HTTP version specifier from `data`.
+
+        :param bytes data: buffer to parse
+        :return: the bytes remaining in ``data`` after parsing
+        :raises jester.errors.MalformedHttpVersion:
+            when a malformed version is parsed.  This exception
+            is raised when the accumulated stream could not possibly
+            be an HTTP version specifier.
+
+        """
+        if self._tokens[-1] == SENTINEL_TOKEN:
+            self._tokens[-1] = b''
+        current = self._tokens[-1] + data
+        if len(current) >= 8:
+            if current.startswith(b'HTTP/'):
+                major, dot, minor = current[5:8].decode('us-ascii')
+                if dot == '.':
+                    self.version = int(major), int(minor)
+                    self._tokens[-1] = current[:8]
+                    return current[8:]
+                else:
+                    raise errors.MalformedHttpVersion(current)
+            else:
+                raise errors.MalformedHttpVersion(current)
+        self._consume(data, len(data))
 
     @property
     def tokens(self):

@@ -17,3 +17,8 @@ returns a *falsy* value.
 .. autoclass:: jester.parsing.ProtocolParser
    :members:
    :private-members:
+
+Error Handling
+--------------
+.. automodule:: jester.errors
+   :members:
