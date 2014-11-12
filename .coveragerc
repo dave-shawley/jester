@@ -1,0 +1,6 @@
+[run]
+source = jester,tests
+branch = 1
+
+[report]
+omit = env/*
