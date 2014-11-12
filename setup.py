@@ -18,8 +18,6 @@ def read_requirements_file(name):
 
 install_requirements = read_requirements_file('requirements.txt')
 test_requirements = read_requirements_file('test-requirements.txt')
-if sys.version_info < (2, 7):
-    test_requirements.append('unittest2')
 if sys.version_info < (3, ):
     install_requirements.append('trollius>=1.0.2,<2')
     test_requirements.append('mock>1.0,<2')
