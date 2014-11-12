@@ -33,7 +33,7 @@ class ProtocolParser(object):
     """
 
     def __init__(self):
-        super().__init__()
+        super(ProtocolParser, self).__init__()
         self._tokens = [SENTINEL_TOKEN]
         self.version = None
 

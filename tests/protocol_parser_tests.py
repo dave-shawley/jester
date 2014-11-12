@@ -6,7 +6,7 @@ from jester import errors, parsing
 class WhenParsingTokens(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
+        super(WhenParsingTokens, self).setUp()
         self.parser = parsing.ProtocolParser()
 
     def test_that_tokens_are_parsed(self):
@@ -30,7 +30,7 @@ class WhenParsingTokens(unittest.TestCase):
 class WhenParsingRequestTarget(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
+        super(WhenParsingRequestTarget, self).setUp()
         self.parser = parsing.ProtocolParser()
 
     def test_that_parsing_terminates_at_space(self):

@@ -21,6 +21,7 @@ test_requirements = read_requirements_file('test-requirements.txt')
 if sys.version_info < (2, 7):
     test_requirements.append('unittest2')
 if sys.version_info < (3, ):
+    install_requirements.append('trollius>=1.0.2,<2')
     test_requirements.append('mock>1.0,<2')
 
 
@@ -47,6 +48,7 @@ setuptools.setup(
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2.7',
         'Development Status :: 1 - Planning',
     ],
 )
