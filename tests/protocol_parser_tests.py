@@ -72,24 +72,3 @@ class WhenParsingHttpVersion(unittest.TestCase):
     def test_that_parse_fails_when_start_token_is_missing(self):
         with self.assertRaises(errors.MalformedHttpVersion):
             self.parser.parse_version(b'http/1.1')
-
-
-class WhenRequestLineIsParsed(unittest.TestCase):
-
-    def setUp(self):
-        super(WhenRequestLineIsParsed, self).setUp()
-        self.parser = parsing.ProtocolParser()
-        self.parser.add_callback(
-            parsing.ProtocolParser.request_line_received, self.callback)
-        self.last_call = None
-
-    def callback(self, *args, **kwargs):
-        self.last_call = (args, kwargs)
-
-    def test_that_request_line_received_callback_is_called(self):
-        self.parser.feed(b'GET / HTTP/1.1')
-        self.assertIsNotNone(self.last_call)
-
-    def test_that_callback_receives_request_line(self):
-        self.parser.feed(b'GET / HTTP/1.1')
-        self.assertEqual(self.last_call[0], ('GET', '/', 'HTTP/1.1'))
