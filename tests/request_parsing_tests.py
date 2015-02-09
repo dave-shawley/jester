@@ -16,9 +16,15 @@ class WhenRequestLineIsParsed(unittest.TestCase):
         self.last_call = (args, kwargs)
 
     def test_that_request_line_received_callback_is_called(self):
-        self.parser.feed(b'GET / HTTP/1.1')
+        self.parser.feed(b'GET / HTTP/1.1\r\n')
         self.assertIsNotNone(self.last_call)
 
     def test_that_callback_receives_request_line(self):
-        self.parser.feed(b'GET / HTTP/1.1')
+        self.parser.feed(b'GET / HTTP/1.1\r\n')
         self.assertEqual(self.last_call[0], ('GET', '/', 'HTTP/1.1'))
+
+    def test_that_callback_is_not_called_until_crlf_received(self):
+        self.parser.feed(b'GET / HTTP/1.1')
+        self.assertIsNone(self.last_call)
+        self.parser.feed(b'\r\n')
+        self.assertIsNotNone(self.last_call)

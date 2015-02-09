@@ -72,3 +72,18 @@ class WhenParsingHttpVersion(unittest.TestCase):
     def test_that_parse_fails_when_start_token_is_missing(self):
         with self.assertRaises(errors.MalformedHttpVersion):
             self.parser.parse_version(b'http/1.1')
+
+
+class WhenParsingRequiredWhitespace(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenParsingRequiredWhitespace, self).setUp()
+        self.parser = parsing.ProtocolParser()
+
+    def test_that_skipping_cr_fails_without_cr(self):
+        with self.assertRaises(errors.ProtocolParseException):
+            self.parser.skip_cr(b'\n\r')
+
+    def test_that_skipping_lf_fails_without_lf(self):
+        with self.assertRaises(errors.ProtocolParseException):
+            self.parser.skip_lf(b'\r\n')

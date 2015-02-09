@@ -1,4 +1,5 @@
 import collections
+import functools
 
 from . import errors
 
@@ -11,6 +12,17 @@ TOKEN_CHARS = URI_CHARS + b'^`|'
 """Bytes that are valid in the *token* production."""
 
 SENTINEL_TOKEN = object()
+
+
+def _emit(parse_function, event_function):
+    """Call `event_function` after `parse_function` runs."""
+    @functools.wraps(parse_function)
+    def wrapped(data_in):
+        data_out = parse_function(data_in)
+        if data_in != data_out:
+            event_function()
+        return data_out
+    return wrapped
 
 
 class ProtocolParser(object):
@@ -44,6 +56,8 @@ class ProtocolParser(object):
             self.parse_target,
             self.skip_linear_whitespace,
             self.parse_version,
+            self.skip_cr,
+            _emit(self.skip_lf, self.request_line_received),
         ]
 
     def feed(self, data):
@@ -71,6 +85,18 @@ class ProtocolParser(object):
         """
         remaining = data.lstrip(TOKEN_CHARS)
         return self._consume(data, len(data) - len(remaining))
+
+    @staticmethod
+    def skip_cr(data):
+        if data.startswith(b'\r'):
+            return data[1:]
+        raise errors.ProtocolParseException(data[0])
+
+    @staticmethod
+    def skip_lf(data):
+        if data.startswith(b'\n'):
+            return data[1:]
+        raise errors.ProtocolParseException(data[0])
 
     def skip_linear_whitespace(self, data):
         """
@@ -123,7 +149,6 @@ class ProtocolParser(object):
                 major, dot, minor = current[5:8].decode('us-ascii')
                 if dot == '.':
                     self._tokens[-1] = current[:8]
-                    self.request_line_received()
                     return current[8:]
                 else:
                     raise errors.MalformedHttpVersion(current)
@@ -148,17 +173,12 @@ class ProtocolParser(object):
 
     def request_line_received(self):
         """Event fired when the request line is parsed."""
-        callbacks = self._callbacks[ProtocolParser.request_line_received]
-        if not callbacks:
-            return
-
         method, resource, version = self.tokens
-        for callback in callbacks:
+        for callback in self._callbacks[ProtocolParser.request_line_received]:
             callback(method.decode('US-ASCII'),
                      resource.decode('US-ASCII'),
                      version.decode('US-ASCII'))
-        del self._tokens[:]
-        self._tokens.append(SENTINEL_TOKEN)
+        self._clear_tokens()
 
     def _consume(self, data, num_bytes):
         """
@@ -185,3 +205,6 @@ class ProtocolParser(object):
         """Append the sentinel token if it isn't already there."""
         if self._tokens[-1] != SENTINEL_TOKEN:
             self._tokens.append(SENTINEL_TOKEN)
+
+    def _clear_tokens(self):
+        del self._tokens[:]
