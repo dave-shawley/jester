@@ -1,3 +1,5 @@
+import collections
+
 from . import errors
 
 
@@ -18,24 +20,44 @@ class ProtocolParser(object):
 
     This class parses HTTP messages as a stream of bytes and emits
     events as portions of the protocol are recognized.  The events
-    are sent to an object that implements a simple event handling
-    protocol::
+    are sent to other objects by calling registered callbacks.  An
+    event is sent by invoking the callback inline during the parse.
 
-    - ``request_line_received``
-    - ``header_parsed``
-    - ``body_parsed``
+    Callbacks are registered by calling :meth:`.add_callback` with
+    the method that you want to be notified by and the callable to
+    invoke when the event occurs.  The following methods emit
+    notifications and thus can be passed as the first parameter to
+    :meth:`.add_callback`.
 
-    The events are sent by calling the appropriate method inline
-    during the parse.  The event handler can reject a message from
-    any callback by raising a :exc:`jester.errors.RejectMessage`
-    instance.
+    - :meth:`.request_line_received` callback is invoked with the
+      the method, resource, and HTTP version
 
     """
 
     def __init__(self):
         super(ProtocolParser, self).__init__()
+        self._callbacks = collections.defaultdict(list)
         self._tokens = [SENTINEL_TOKEN]
-        self.version = None
+        self._parse_stack = [
+            self.parse_token,
+            self.skip_linear_whitespace,
+            self.parse_target,
+            self.skip_linear_whitespace,
+            self.parse_version,
+        ]
+
+    def feed(self, data):
+        """
+        Consumes `data` and generates a stream of events.
+
+        :param bytes data: bytes received from the client.
+
+        """
+        while data and self._parse_stack:
+            data = self._parse_stack[0](data)
+            if data:
+                self._parse_stack.pop(0)
+                self.tokens.append(b'')
 
     def parse_token(self, data):
         """
@@ -100,8 +122,8 @@ class ProtocolParser(object):
             if current.startswith(b'HTTP/'):
                 major, dot, minor = current[5:8].decode('us-ascii')
                 if dot == '.':
-                    self.version = int(major), int(minor)
                     self._tokens[-1] = current[:8]
+                    self.request_line_received()
                     return current[8:]
                 else:
                     raise errors.MalformedHttpVersion(current)
@@ -111,7 +133,32 @@ class ProtocolParser(object):
 
     @property
     def tokens(self):
+        """Tokens that are currently being processed."""
         return [t for t in self._tokens if t != SENTINEL_TOKEN]
+
+    def add_callback(self, event, callback):
+        """
+        Add a callable to invoke when `event` occurs.
+
+        :param event: the event that callback should be called for
+        :param callback: the callable to invoke
+
+        """
+        self._callbacks[event].append(callback)
+
+    def request_line_received(self):
+        """Event fired when the request line is parsed."""
+        callbacks = self._callbacks[ProtocolParser.request_line_received]
+        if not callbacks:
+            return
+
+        method, resource, version = self.tokens
+        for callback in callbacks:
+            callback(method.decode('US-ASCII'),
+                     resource.decode('US-ASCII'),
+                     version.decode('US-ASCII'))
+        del self._tokens[:]
+        self._tokens.append(SENTINEL_TOKEN)
 
     def _consume(self, data, num_bytes):
         """

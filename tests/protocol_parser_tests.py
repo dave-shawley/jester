@@ -56,7 +56,6 @@ class WhenParsingHttpVersion(unittest.TestCase):
         buffer = self.parser.parse_version(buffer)
         self.assertEqual(buffer, b'\r\n')
         self.assertEqual(self.parser.tokens, [b'HTTP/1.1'])
-        self.assertEqual(self.parser.version, (1, 1))
 
     def test_that_parsing_by_byte_succeeds(self):
         remaining = None
@@ -65,7 +64,6 @@ class WhenParsingHttpVersion(unittest.TestCase):
             remaining = self.parser.parse_version(ch.encode())
         self.assertEqual(remaining, b'')
         self.assertEqual(self.parser.tokens, [b'HTTP/0.9'])
-        self.assertEqual(self.parser.version, (0, 9))
 
     def test_that_missing_dot_fails(self):
         with self.assertRaises(errors.MalformedHttpVersion):
@@ -74,3 +72,24 @@ class WhenParsingHttpVersion(unittest.TestCase):
     def test_that_parse_fails_when_start_token_is_missing(self):
         with self.assertRaises(errors.MalformedHttpVersion):
             self.parser.parse_version(b'http/1.1')
+
+
+class WhenRequestLineIsParsed(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenRequestLineIsParsed, self).setUp()
+        self.parser = parsing.ProtocolParser()
+        self.parser.add_callback(
+            parsing.ProtocolParser.request_line_received, self.callback)
+        self.last_call = None
+
+    def callback(self, *args, **kwargs):
+        self.last_call = (args, kwargs)
+
+    def test_that_request_line_received_callback_is_called(self):
+        self.parser.feed(b'GET / HTTP/1.1')
+        self.assertIsNotNone(self.last_call)
+
+    def test_that_callback_receives_request_line(self):
+        self.parser.feed(b'GET / HTTP/1.1')
+        self.assertEqual(self.last_call[0], ('GET', '/', 'HTTP/1.1'))
