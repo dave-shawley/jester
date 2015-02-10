@@ -71,15 +71,9 @@ class ProtocolParser(object):
         """
         self.logger.debug('feeding %r into the parser', data)
         while data and self._parse_stack:
-            parser_name = self._parse_stack[0].__name__
-            self.logger.debug('parsing %r with %s', data, parser_name)
-            data = self._parse_stack[0](data)
-            if data:
-                self._parse_stack.pop(0)
-                self.tokens.append(b'')
-                self.logger.debug(
-                    'finished with %s, remaining - [%s]', parser_name,
-                    ','.join(p.__name__ for p in self._parse_stack))
+            parser = self._parse_stack[0]
+            self.logger.debug('parsing %r with %s', data, parser.__name__)
+            data = parser(data)
 
     def parse_token(self, data):
         """
@@ -94,15 +88,15 @@ class ProtocolParser(object):
         remaining = data.lstrip(TOKEN_CHARS)
         return self._consume(data, len(data) - len(remaining))
 
-    @staticmethod
-    def skip_cr(data):
+    def skip_cr(self, data):
         if data.startswith(b'\r'):
+            self._pop_parser()
             return data[1:]
         raise errors.ProtocolParseException(data[0])
 
-    @staticmethod
-    def skip_lf(data):
+    def skip_lf(self, data):
         if data.startswith(b'\n'):
+            self._pop_parser()
             return data[1:]
         raise errors.ProtocolParseException(data[0])
 
@@ -117,7 +111,10 @@ class ProtocolParser(object):
 
         """
         self._terminate_current_token()
-        return data.lstrip(b'\t ')
+        remaining = data.lstrip(b'\t ')
+        if remaining:
+            self._pop_parser()
+        return remaining
 
     def parse_target(self, data):
         """
@@ -157,7 +154,9 @@ class ProtocolParser(object):
                 major, dot, minor = current[5:8].decode('us-ascii')
                 if dot == '.':
                     self._tokens[-1] = current[:8]
-                    return current[8:]
+                    remaining = current[8:]
+                    self._pop_parser()
+                    return remaining
                 else:
                     raise errors.MalformedHttpVersion(current)
             else:
@@ -201,13 +200,19 @@ class ProtocolParser(object):
 
         """
         self._append_to_token(data[:num_bytes])
-        return data[num_bytes:]
+        remaining = data[num_bytes:]
+        if remaining:
+            self._pop_parser()
+        return remaining
 
     def _append_to_token(self, data):
-        if self._tokens[-1] is SENTINEL_TOKEN:
-            self._tokens[-1] = data
+        if self._tokens:
+            if self._tokens[-1] is SENTINEL_TOKEN:
+                self._tokens[-1] = data
+            else:
+                self._tokens[-1] += data
         else:
-            self._tokens[-1] += data
+            self._tokens.append(data)
 
     def _terminate_current_token(self):
         """Append the sentinel token if it isn't already there."""
@@ -216,3 +221,9 @@ class ProtocolParser(object):
 
     def _clear_tokens(self):
         del self._tokens[:]
+
+    def _pop_parser(self):
+        current_parser = self._parse_stack.pop(0)
+        self.logger.debug(
+            'finished with %s, remaining - [%r]', current_parser.__name__,
+            ','.join(p.__name__ for p in self._parse_stack))
