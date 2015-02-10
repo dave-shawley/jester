@@ -1,5 +1,6 @@
 import collections
 import functools
+import logging
 
 from . import errors
 
@@ -48,6 +49,7 @@ class ProtocolParser(object):
 
     def __init__(self):
         super(ProtocolParser, self).__init__()
+        self.logger = logging.getLogger('jester.Protocol')
         self._callbacks = collections.defaultdict(list)
         self._tokens = [SENTINEL_TOKEN]
         self._parse_stack = [
@@ -67,11 +69,17 @@ class ProtocolParser(object):
         :param bytes data: bytes received from the client.
 
         """
+        self.logger.debug('feeding %r into the parser', data)
         while data and self._parse_stack:
+            parser_name = self._parse_stack[0].__name__
+            self.logger.debug('parsing %r with %s', data, parser_name)
             data = self._parse_stack[0](data)
             if data:
                 self._parse_stack.pop(0)
                 self.tokens.append(b'')
+                self.logger.debug(
+                    'finished with %s, remaining - [%s]', parser_name,
+                    ','.join(p.__name__ for p in self._parse_stack))
 
     def parse_token(self, data):
         """
