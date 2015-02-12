@@ -54,12 +54,13 @@ class ProtocolParser(object):
         self._tokens = [SENTINEL_TOKEN]
         self._parse_stack = [
             self.parse_token,
-            self.skip_linear_whitespace,
+            self._skip_single_character(b' '),
             self.parse_target,
-            self.skip_linear_whitespace,
+            self._skip_single_character(b' '),
             self.parse_version,
-            self.skip_cr,
-            _emit(self.skip_lf, self.request_line_received),
+            self._skip_single_character(b'\r'),
+            _emit(self._skip_single_character(b'\n'),
+                  self.request_line_received),
         ]
 
     def feed(self, data):
@@ -87,18 +88,6 @@ class ProtocolParser(object):
         """
         remaining = data.lstrip(TOKEN_CHARS)
         return self._consume(data, len(data) - len(remaining))
-
-    def skip_cr(self, data):
-        if data.startswith(b'\r'):
-            self._pop_parser()
-            return data[1:]
-        raise errors.ProtocolParseException(data[0])
-
-    def skip_lf(self, data):
-        if data.startswith(b'\n'):
-            self._pop_parser()
-            return data[1:]
-        raise errors.ProtocolParseException(data[0])
 
     def skip_linear_whitespace(self, data):
         """
@@ -227,3 +216,14 @@ class ProtocolParser(object):
         self.logger.debug(
             'finished with %s, remaining - [%r]', current_parser.__name__,
             ','.join(p.__name__ for p in self._parse_stack))
+
+    def _skip_single_character(self, character):
+        """Generate a parser that skips `character` or fails."""
+        def parser(data):
+            if data.startswith(character):
+                self._terminate_current_token()
+                self._pop_parser()
+                return data[1:]
+            raise errors.ProtocolParseException(data[0])
+        parser.__name__ = 'skip({0!r})'.format(character.decode('utf-8'))
+        return parser

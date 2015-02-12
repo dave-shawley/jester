@@ -74,16 +74,18 @@ class WhenParsingHttpVersion(unittest.TestCase):
             self.parser.parse_version(b'http/1.1')
 
 
-class WhenParsingRequiredWhitespace(unittest.TestCase):
+class WhenSkippingSingleCharacter(unittest.TestCase):
 
     def setUp(self):
-        super(WhenParsingRequiredWhitespace, self).setUp()
+        super(WhenSkippingSingleCharacter, self).setUp()
         self.parser = parsing.ProtocolParser()
 
-    def test_that_skipping_cr_fails_without_cr(self):
+    def test_that_parsing_fails_when_character_is_missing(self):
         with self.assertRaises(errors.ProtocolParseException):
-            self.parser.skip_cr(b'\n\r')
+            method = self.parser._skip_single_character(b'1')
+            method(b'2')
 
-    def test_that_skipping_lf_fails_without_lf(self):
-        with self.assertRaises(errors.ProtocolParseException):
-            self.parser.skip_lf(b'\r\n')
+    def test_that_parsing_skips_matching_character(self):
+        method = self.parser._skip_single_character(b'1')
+        data = method(b'12')
+        self.assertEqual(data, b'2')
