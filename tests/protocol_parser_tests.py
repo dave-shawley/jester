@@ -110,3 +110,20 @@ class WhenParsingFixedString(unittest.TestCase):
     def test_that_parsing_fails_with_mismatched_string(self):
         with self.assertRaises(errors.ProtocolParseException):
             self.parser.feed(b'mismatch')
+
+
+class WhenParsingNumber(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenParsingNumber, self).setUp()
+        self.parser = parsing.ProtocolParser()
+
+    def test_that_simple_number_is_parsed(self):
+        remaining = self.parser.parse_number(b'1234')
+        self.assertEqual(self.parser.tokens, [b'1234'])
+        self.assertEqual(remaining, b'')
+
+    def test_that_only_digits_are_parsed(self):
+        remaining = self.parser.parse_number(b'1234abcd')
+        self.assertEqual(self.parser.tokens, [b'1234'])
+        self.assertEqual(remaining, b'abcd')

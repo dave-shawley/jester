@@ -4,6 +4,8 @@ import logging
 
 from . import errors
 
+DIGITS = b'0123456789'
+"""Bytes that are valid numerical digits"""
 
 URI_CHARS = (b":/?#[]@!$&'()*+,;=0123456789-._~%"
              b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
@@ -123,6 +125,18 @@ class ProtocolParser(object):
 
         """
         remaining = data.lstrip(URI_CHARS)
+        self._consume(data, len(data) - len(remaining))
+        return remaining
+
+    def parse_number(self, data):
+        """
+        Parse a string of digits from `data`.
+
+        :param bytes data: buffer to parse
+        :return: the bytes remaining in ``data`` after parsing
+
+        """
+        remaining = data.lstrip(DIGITS)
         self._consume(data, len(data) - len(remaining))
         return remaining
 
