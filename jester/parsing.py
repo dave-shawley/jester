@@ -52,6 +52,7 @@ class ProtocolParser(object):
         self.logger = logging.getLogger('jester.Protocol')
         self._callbacks = collections.defaultdict(list)
         self._tokens = [SENTINEL_TOKEN]
+        self._working_buffer = bytearray()
         self._parse_stack = [
             self.parse_token,
             self._skip_single_character(b' '),
@@ -68,6 +69,7 @@ class ProtocolParser(object):
         Consumes `data` and generates a stream of events.
 
         :param bytes data: bytes received from the client.
+        :return: any bytes that remain after parsing is complete
 
         """
         self.logger.debug('feeding %r into the parser', data)
@@ -75,6 +77,7 @@ class ProtocolParser(object):
             parser = self._parse_stack[0]
             self.logger.debug('parsing %r with %s', data, parser.__name__)
             data = parser(data)
+        return data
 
     def parse_token(self, data):
         """
@@ -203,6 +206,13 @@ class ProtocolParser(object):
         else:
             self._tokens.append(data)
 
+    def _add_token(self, data):
+        if self._tokens[-1] is SENTINEL_TOKEN:
+            self._tokens[-1] = data
+        else:
+            self._tokens.append(data)
+        self._terminate_current_token()
+
     def _terminate_current_token(self):
         """Append the sentinel token if it isn't already there."""
         if self._tokens[-1] != SENTINEL_TOKEN:
@@ -212,6 +222,7 @@ class ProtocolParser(object):
         del self._tokens[:]
 
     def _pop_parser(self):
+        self._working_buffer.clear()
         current_parser = self._parse_stack.pop(0)
         self.logger.debug(
             'finished with %s, remaining - [%r]', current_parser.__name__,
@@ -227,3 +238,18 @@ class ProtocolParser(object):
             raise errors.ProtocolParseException(data[0])
         parser.__name__ = 'skip({0!r})'.format(character.decode('utf-8'))
         return parser
+
+    def _parse_fixed_string(self, fixed_value):
+        """Generate a parser that consumes `fixed_value` or fails."""
+        def parser(data):
+            self._working_buffer.extend(data)
+            if self._working_buffer.startswith(fixed_value):
+                remaining = self._working_buffer[len(fixed_value):]
+                self._add_token(fixed_value)
+                self._pop_parser()
+                return remaining
+            if not fixed_value.startswith(self._working_buffer):
+                raise errors.ProtocolParseException(self._working_buffer)
+        parser.__name__ = 'parse({0!r})'.format(fixed_value.decode('utf-8'))
+        return parser
+

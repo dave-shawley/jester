@@ -89,3 +89,24 @@ class WhenSkippingSingleCharacter(unittest.TestCase):
         method = self.parser._skip_single_character(b'1')
         data = method(b'12')
         self.assertEqual(data, b'2')
+
+
+class WhenParsingFixedString(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenParsingFixedString, self).setUp()
+        self.parser = parsing.ProtocolParser()
+        self.parser._parse_stack = [self.parser._parse_fixed_string(b'fixed')]
+
+    def test_that_parsing_consumes_matching_string(self):
+        self.parser.feed(b'fix')
+        self.assertEqual(self.parser.tokens, [])
+        self.parser.feed(b'e')
+        self.assertEqual(self.parser.tokens, [])
+        remaining = self.parser.feed(b'd\n')
+        self.assertEqual(self.parser.tokens, [b'fixed'])
+        self.assertEqual(remaining, b'\n')
+
+    def test_that_parsing_fails_with_mismatched_string(self):
+        with self.assertRaises(errors.ProtocolParseException):
+            self.parser.feed(b'mismatch')
