@@ -50,28 +50,31 @@ class WhenParsingHttpVersion(unittest.TestCase):
     def setUp(self):
         super(WhenParsingHttpVersion, self).setUp()
         self.parser = parsing.ProtocolParser()
+        self.parser._parse_stack = [self.parser.parse_http_version]
 
     def test_that_parsing_version_succeeds(self):
         buffer = b'HTTP/1.1\r\n'
-        buffer = self.parser.parse_version(buffer)
+        buffer = self.parser.feed(buffer)
         self.assertEqual(buffer, b'\r\n')
         self.assertEqual(self.parser.tokens, [b'HTTP/1.1'])
 
     def test_that_parsing_by_byte_succeeds(self):
-        remaining = None
-        buffer = b'HTTP/0.9'
-        for ch in buffer.decode():
-            remaining = self.parser.parse_version(ch.encode())
-        self.assertEqual(remaining, b'')
+        buffer = b'HTTP/0.9\r\n'
+        for ch in buffer:
+            self.parser.feed(bytes([ch]))
         self.assertEqual(self.parser.tokens, [b'HTTP/0.9'])
 
     def test_that_missing_dot_fails(self):
         with self.assertRaises(errors.MalformedHttpVersion):
-            self.parser.parse_version(b'HTTP/1-1')
+            self.parser.feed(b'HTTP/1-1')
 
     def test_that_parse_fails_when_start_token_is_missing(self):
         with self.assertRaises(errors.MalformedHttpVersion):
-            self.parser.parse_version(b'http/1.1')
+            self.parser.feed(b'http/1.1')
+
+    def test_that_parse_fails_with_non_digit_version(self):
+        with self.assertRaises(errors.MalformedHttpVersion):
+            self.parser.feed(b'HTTP/1.X')
 
 
 class WhenSkippingSingleCharacter(unittest.TestCase):
@@ -96,7 +99,7 @@ class WhenParsingFixedString(unittest.TestCase):
     def setUp(self):
         super(WhenParsingFixedString, self).setUp()
         self.parser = parsing.ProtocolParser()
-        self.parser._parse_stack = [self.parser._parse_fixed_string(b'fixed')]
+        self.parser._parse_stack = [self.parser.parse_fixed_string(b'fixed')]
 
     def test_that_parsing_consumes_matching_string(self):
         self.parser.feed(b'fix')

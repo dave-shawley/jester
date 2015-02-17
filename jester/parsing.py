@@ -28,6 +28,17 @@ def _emit(parse_function, event_function):
     return wrapped
 
 
+def _translate_parse_failure(parser, other_exception):
+    """Wrap `parser` and translate jester exceptions to `other_exception`."""
+    @functools.wraps(parser)
+    def translated(data):
+        try:
+            return parser(data)
+        except errors.ProtocolParseException as exc:
+            raise other_exception(exc.lexeme)
+    return translated
+
+
 class ProtocolParser(object):
 
     """
@@ -60,7 +71,7 @@ class ProtocolParser(object):
             self._skip_single_character(b' '),
             self.parse_target,
             self._skip_single_character(b' '),
-            self.parse_version,
+            self.parse_http_version,
             self._skip_single_character(b'\r'),
             _emit(self._skip_single_character(b'\n'),
                   self.request_line_received),
@@ -140,7 +151,7 @@ class ProtocolParser(object):
         self._consume(data, len(data) - len(remaining))
         return remaining
 
-    def parse_version(self, data):
+    def parse_http_version(self, data):
         """
         Parse an HTTP version specifier from `data`.
 
@@ -152,22 +163,29 @@ class ProtocolParser(object):
             be an HTTP version specifier.
 
         """
-        if self._tokens[-1] == SENTINEL_TOKEN:
-            self._tokens[-1] = b''
-        current = self._tokens[-1] + data
-        if len(current) >= 8:
-            if current.startswith(b'HTTP/'):
-                major, dot, minor = current[5:8].decode('us-ascii')
-                if dot == '.':
-                    self._tokens[-1] = current[:8]
-                    remaining = current[8:]
-                    self._pop_parser()
-                    return remaining
-                else:
-                    raise errors.MalformedHttpVersion(current)
-            else:
-                raise errors.MalformedHttpVersion(current)
-        self._consume(data, len(data))
+        parse_stack = [
+            self.parse_fixed_string(b'HTTP/'),
+            self.parse_single_character_from(b'0123456789'),
+            self.parse_fixed_string(b'.'),
+            self.parse_single_character_from(b'0123456789'),
+        ]
+        for index, parser in enumerate(parse_stack):
+            parse_stack[index] = _translate_parse_failure(
+                parser, errors.MalformedHttpVersion)
+        parse_stack.append(self._collapse_http_version)
+        parse_stack.extend(self._parse_stack[1:])
+        self._parse_stack = parse_stack
+        return data
+
+    def _collapse_http_version(self, data):
+        """Collapse HTTP version tokens into a single token."""
+        self.logger.debug('collapsing HTTP version - %r', self._tokens[-4:])
+        self._tokens.pop()  # SENTINEL_TOKEN
+        version_token = b''.join(self._tokens[-4:])
+        del self._tokens[-4:]
+        self._tokens.append(version_token)
+        self._pop_parser()
+        return data
 
     @property
     def tokens(self):
@@ -253,7 +271,7 @@ class ProtocolParser(object):
         parser.__name__ = 'skip({0!r})'.format(character.decode('utf-8'))
         return parser
 
-    def _parse_fixed_string(self, fixed_value):
+    def parse_fixed_string(self, fixed_value):
         """Generate a parser that consumes `fixed_value` or fails."""
         def parser(data):
             self._working_buffer.extend(data)
@@ -267,3 +285,14 @@ class ProtocolParser(object):
         parser.__name__ = 'parse({0!r})'.format(fixed_value.decode('utf-8'))
         return parser
 
+    def parse_single_character_from(self, characters):
+        """Generate a parser that consumes a character from `characters`."""
+        def parser(data):
+            if data[0] in characters:
+                self._add_token(data[0:1])
+                self._pop_parser()
+                return data[1:]
+            raise errors.ProtocolParseException(data[0])
+        parser.__name__ = 'parser(any({0!r}))'.format(
+            characters.decode('utf-8'))
+        return parser
