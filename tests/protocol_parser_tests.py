@@ -60,8 +60,8 @@ class WhenParsingHttpVersion(unittest.TestCase):
 
     def test_that_parsing_by_byte_succeeds(self):
         buffer = b'HTTP/0.9\r\n'
-        for ch in buffer:
-            self.parser.feed(bytes([ch]))
+        for idx in range(0, len(buffer)):
+            self.parser.feed(buffer[idx:idx+1])
         self.assertEqual(self.parser.tokens, [b'HTTP/0.9'])
 
     def test_that_missing_dot_fails(self):

@@ -254,7 +254,7 @@ class ProtocolParser(object):
         del self._tokens[:]
 
     def _pop_parser(self):
-        self._working_buffer.clear()
+        self._working_buffer = bytearray()
         current_parser = self._parse_stack.pop(0)
         self.logger.debug(
             'finished with %s, remaining - [%r]', current_parser.__name__,
@@ -287,9 +287,11 @@ class ProtocolParser(object):
 
     def parse_single_character_from(self, characters):
         """Generate a parser that consumes a character from `characters`."""
+        valid_chars = bytearray(characters)
+
         def parser(data):
-            if data[0] in characters:
-                self._add_token(data[0:1])
+            if data[0] in valid_chars:  # RHS is reqd to be bytearray in 2.7
+                self._add_token(bytes(data[0:1]))  # need bytes() for 2.7
                 self._pop_parser()
                 return data[1:]
             raise errors.ProtocolParseException(data[0])
