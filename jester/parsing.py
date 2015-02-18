@@ -10,6 +10,12 @@ DIGITS = b'0123456789'
 ALPHA = b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 """Bytes that are valid alphabetic characters"""
 
+VCHARS = bytes(bytearray(range(0x21, 0x7E)))
+"""Bytes that are 'visible characters' per :rfc:`5234`"""
+
+HEADER_CHARS = VCHARS + b' \t'
+"""Bytes that are valid in a header value"""
+
 URI_CHARS = (b":/?#[]@!$&'()*+,;=0123456789-._~%"
              b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 """Bytes that are valid in the *request-target* production."""
@@ -78,6 +84,7 @@ class ProtocolParser(object):
             self._skip_single_character(b'\r'),
             _emit(self._skip_single_character(b'\n'),
                   self.request_line_received),
+            self.parse_header,
         ]
 
     def feed(self, data):
@@ -180,6 +187,46 @@ class ProtocolParser(object):
         self._parse_stack = parse_stack
         return data
 
+    def parse_header(self, data):
+        """
+        Parse a header.
+
+        :param bytes data: buffer to parse
+        :return: ``data`` unchanged
+
+        This method checks if there is another header in the stream.  If
+        there is, then the parse stack is set up to parse another header.
+
+        """
+        self._pop_parser()
+        if data.startswith(b'\r'):
+            return data
+        self._unshift_parsers(
+            self.parse_token,
+            self._skip_single_character(b':'),
+            self.skip_linear_whitespace,
+            self.parse_header_value,
+            self._skip_single_character(b'\r'),
+            _emit(self._skip_single_character(b'\n'),
+                  self.header_parsed),
+            self.parse_header,
+        )
+        return data
+
+    def parse_header_value(self, data):
+        """
+        Parse a header value.
+
+        :param bytes data: buffer to parse
+        :return: the bytes remaining in ``data`` after parsing
+
+        """
+        remaining = data.lstrip(HEADER_CHARS)
+        if remaining == data:
+            raise errors.ProtocolParseException(data)
+        self._consume(data, len(data) - len(remaining))
+        return remaining
+
     def _collapse_http_version(self, data):
         """Collapse HTTP version tokens into a single token."""
         self.logger.debug('collapsing HTTP version - %r', self._tokens[-4:])
@@ -213,6 +260,12 @@ class ProtocolParser(object):
                      resource.decode('US-ASCII'),
                      version.decode('US-ASCII'))
         self._clear_tokens()
+
+    def header_parsed(self):
+        """Event fired when a header is parsed."""
+        header_name, header_value = self.tokens
+        for callback in self._callbacks[ProtocolParser.header_parsed]:
+            callback(header_name.decode('US-ASCII'), header_value)
 
     def _consume(self, data, num_bytes):
         """
@@ -255,6 +308,11 @@ class ProtocolParser(object):
 
     def _clear_tokens(self):
         del self._tokens[:]
+
+    def _unshift_parsers(self, *parsers):
+        self.logger.debug('inserting parsers at front - %r', parsers)
+        for parser in reversed(parsers):
+            self._parse_stack.insert(0, parser)
 
     def _pop_parser(self):
         self._working_buffer = bytearray()

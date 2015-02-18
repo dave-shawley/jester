@@ -1,3 +1,4 @@
+import random
 import unittest
 
 from jester import errors, parsing
@@ -130,3 +131,24 @@ class WhenParsingNumber(unittest.TestCase):
         remaining = self.parser.parse_number(b'1234abcd')
         self.assertEqual(self.parser.tokens, [b'1234'])
         self.assertEqual(remaining, b'abcd')
+
+
+class WhenParsingHeaderValue(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenParsingHeaderValue, self).setUp()
+        self.parser = parsing.ProtocolParser()
+
+    def test_that_leading_valid_characters_are_consumed(self):
+        valid_characters = bytearray(range(0x21, 0x7E))
+        valid_characters.extend(b' \t')
+        random.shuffle(valid_characters)
+        data = bytes(valid_characters)
+        data += b'\x7F'
+
+        remaining = self.parser.parse_header_value(data)
+        self.assertEqual(remaining, b'\x7F')
+
+    def test_that_missing_value_is_rejected(self):
+        with self.assertRaises(errors.ProtocolParseException):
+            self.parser.parse_header_value(b'\x7F')

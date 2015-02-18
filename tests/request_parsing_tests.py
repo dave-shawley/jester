@@ -28,3 +28,24 @@ class WhenRequestLineIsParsed(unittest.TestCase):
         self.assertIsNone(self.last_call)
         self.parser.feed(b'\r\n')
         self.assertIsNotNone(self.last_call)
+
+
+class WhenHeadersAreParsed(unittest.TestCase):
+
+    def setUp(self):
+        super(WhenHeadersAreParsed, self).setUp()
+        self.parser = parsing.ProtocolParser()
+        self.parser.add_callback(
+            parsing.ProtocolParser.header_parsed, self.callback)
+        self.callback_calls = []
+
+        self.parser.feed(b'GET / HTTP/1.1\r\n')
+
+    def callback(self, *args, **kwargs):
+        self.callback_calls.append((args, kwargs))
+
+    def test_that_header_callback_is_invoked(self):
+        self.parser.feed(b'Header: first value\r\n')
+        self.assertEqual(self.callback_calls, [
+            (('Header', b'first value'), {}),
+        ])
