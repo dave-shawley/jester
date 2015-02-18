@@ -7,11 +7,14 @@ from . import errors
 DIGITS = b'0123456789'
 """Bytes that are valid numerical digits"""
 
+ALPHA = b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+"""Bytes that are valid alphabetic characters"""
+
 URI_CHARS = (b":/?#[]@!$&'()*+,;=0123456789-._~%"
              b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')
 """Bytes that are valid in the *request-target* production."""
 
-TOKEN_CHARS = URI_CHARS + b'^`|'
+TOKEN_CHARS = DIGITS + ALPHA + b"!#$%&'*+-.^_`|~"
 """Bytes that are valid in the *token* production."""
 
 SENTINEL_TOKEN = object()
