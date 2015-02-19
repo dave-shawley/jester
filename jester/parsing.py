@@ -266,6 +266,7 @@ class ProtocolParser(object):
         header_name, header_value = self.tokens
         for callback in self._callbacks[ProtocolParser.header_parsed]:
             callback(header_name.decode('US-ASCII'), header_value)
+        self._clear_tokens()
 
     def _consume(self, data, num_bytes):
         """
