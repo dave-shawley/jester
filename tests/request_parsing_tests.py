@@ -37,12 +37,19 @@ class WhenHeadersAreParsed(unittest.TestCase):
         self.parser = parsing.ProtocolParser()
         self.parser.add_callback(
             parsing.ProtocolParser.header_parsed, self.header_parsed)
+        self.parser.add_callback(
+            parsing.ProtocolParser.headers_finished, self.headers_finished)
+
         self.headers = []
+        self.headers_are_finished = False
 
         self.parser.feed(b'GET / HTTP/1.1\r\n')
 
     def header_parsed(self, *args, **kwargs):
         self.headers.append((args, kwargs))
+
+    def headers_finished(self):
+        self.headers_are_finished = True
 
     def test_that_header_callback_is_invoked(self):
         self.parser.feed(b'Header: first value\r\n')
@@ -58,3 +65,7 @@ class WhenHeadersAreParsed(unittest.TestCase):
             (('Header', b'first value'), {}),
             (('Another-Header', b'second value'), {}),
         ])
+
+    def test_that_headers_finished_is_emitted(self):
+        self.parser.feed(b'Header: first\r\n\r\n')
+        self.assertEqual(self.headers_are_finished, True)

@@ -200,6 +200,11 @@ class ProtocolParser(object):
         """
         self._pop_parser()
         if data.startswith(b'\r'):
+            self._unshift_parsers(
+                self._skip_single_character(b'\r'),
+                _emit(self._skip_single_character(b'\n'),
+                      self.headers_finished)
+            )
             return data
         self._unshift_parsers(
             self.parse_token,
@@ -268,6 +273,11 @@ class ProtocolParser(object):
             callback(header_name.decode('US-ASCII'), header_value)
         self._clear_tokens()
 
+    def headers_finished(self):
+        """Event fired when all headers have been parsed."""
+        for callback in self._callbacks[ProtocolParser.headers_finished]:
+            callback()
+
     def _consume(self, data, num_bytes):
         """
         Consume `num_bytes` from `data`.
@@ -304,7 +314,7 @@ class ProtocolParser(object):
 
     def _terminate_current_token(self):
         """Append the sentinel token if it isn't already there."""
-        if self._tokens[-1] != SENTINEL_TOKEN:
+        if len(self._tokens) == 0 or self._tokens[-1] != SENTINEL_TOKEN:
             self._tokens.append(SENTINEL_TOKEN)
 
     def _clear_tokens(self):
