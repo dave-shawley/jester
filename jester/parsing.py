@@ -173,18 +173,18 @@ class ProtocolParser(object):
             be an HTTP version specifier.
 
         """
-        parse_stack = [
+        raw_parsers = [
             self.parse_fixed_string(b'HTTP/'),
             self.parse_single_character_from(b'0123456789'),
             self.parse_fixed_string(b'.'),
             self.parse_single_character_from(b'0123456789'),
         ]
-        for index, parser in enumerate(parse_stack):
-            parse_stack[index] = _translate_parse_failure(
-                parser, errors.MalformedHttpVersion)
+        parse_stack = [
+            _translate_parse_failure(p, errors.MalformedHttpVersion)
+            for p in raw_parsers]
         parse_stack.append(self._collapse_http_version)
-        parse_stack.extend(self._parse_stack[1:])
-        self._parse_stack = parse_stack
+        self._pop_parser()
+        self._unshift_parsers(*parse_stack)
         return data
 
     def parse_header(self, data):
