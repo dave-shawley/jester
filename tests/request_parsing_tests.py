@@ -69,3 +69,17 @@ class WhenHeadersAreParsed(unittest.TestCase):
     def test_that_headers_finished_is_emitted(self):
         self.parser.feed(b'Header: first\r\n\r\n')
         self.assertEqual(self.headers_are_finished, True)
+
+    def test_that_parsing_by_byte_succeeds(self):
+        headers = (
+            b'Header: first value\r\n'
+            b'Another-Header: second value\r\n'
+            b'\r\n'
+        )
+        for index in range(0, len(headers)):
+            self.parser.feed(headers[index:index + 1])
+        self.assertEqual(self.headers, [
+            (('Header', b'first value'), {}),
+            (('Another-Header', b'second value'), {}),
+        ])
+        self.assertEqual(self.headers_are_finished, True)

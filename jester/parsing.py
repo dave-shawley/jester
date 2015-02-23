@@ -228,6 +228,9 @@ class ProtocolParser(object):
         """
         remaining = data.lstrip(HEADER_CHARS)
         if remaining == data:
+            if remaining.startswith(b'\r'):
+                self._pop_parser()
+                return data
             raise errors.ProtocolParseException(data)
         self._consume(data, len(data) - len(remaining))
         return remaining
