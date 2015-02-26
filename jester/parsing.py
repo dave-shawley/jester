@@ -66,8 +66,18 @@ class ProtocolParser(object):
 
     - :meth:`.request_line_received` callback is invoked with the
       the method, resource, and HTTP version
+    - :meth:`.header_parsed` callback is invoked with the header
+      name and value
+    - :meth:`.headers_finished` callback is invoked without
+      parameters and before body parsing is started
 
     """
+
+    PARSING_REQUEST_LINE = object()
+    """Initial state."""
+
+    PARSING_HEADERS = object()
+    """In the process of parsing headers."""
 
     def __init__(self):
         super(ProtocolParser, self).__init__()
@@ -86,6 +96,22 @@ class ProtocolParser(object):
                   self.request_line_received),
             self.parse_header,
         ]
+        self._request_state = self.PARSING_REQUEST_LINE
+
+    @property
+    def request_state(self):
+        """
+        State of parsing the stream.
+
+        This will return one of the state constants depending on how much
+        of the request has been parsed:
+
+        - :data:`PARSING_REQUEST_LINE`: initial state
+        - :data:`PARSING_HEADERS`: transitioned to when starting to parse
+          the first header
+
+        """
+        return self._request_state
 
     def feed(self, data):
         """
@@ -199,6 +225,10 @@ class ProtocolParser(object):
 
         """
         self._pop_parser()
+
+        if self._request_state is self.PARSING_HEADERS:
+            self.header_parsed()
+
         if data.startswith(b'\r'):
             self._unshift_parsers(
                 self._skip_single_character(b'\r'),
@@ -206,14 +236,16 @@ class ProtocolParser(object):
                       self.headers_finished)
             )
             return data
+
+        self._request_state = self.PARSING_HEADERS
+
         self._unshift_parsers(
             self.parse_token,
             self._skip_single_character(b':'),
             self.skip_linear_whitespace,
             self.parse_header_value,
             self._skip_single_character(b'\r'),
-            _emit(self._skip_single_character(b'\n'),
-                  self.header_parsed),
+            self._skip_single_character(b'\n'),
             self.parse_header,
         )
         return data
