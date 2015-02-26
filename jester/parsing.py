@@ -228,6 +228,7 @@ class ProtocolParser(object):
 
         if self._request_state is self.PARSING_HEADERS:
             self.header_parsed()
+        self._request_state = self.PARSING_HEADERS
 
         if data.startswith(b'\r'):
             self._unshift_parsers(
@@ -237,8 +238,6 @@ class ProtocolParser(object):
             )
             return data
 
-        self._request_state = self.PARSING_HEADERS
-
         self._unshift_parsers(
             self.parse_token,
             self._skip_single_character(b':'),
@@ -246,6 +245,7 @@ class ProtocolParser(object):
             self.parse_header_value,
             self._skip_single_character(b'\r'),
             self._skip_single_character(b'\n'),
+            self._parse_folded_header_value,
             self.parse_header,
         )
         return data
@@ -266,6 +266,47 @@ class ProtocolParser(object):
             raise errors.ProtocolParseException(data)
         self._consume(data, len(data) - len(remaining))
         return remaining
+
+    def _parse_folded_header_value(self, data):
+        """
+        Parse the line following a header.
+
+        Section 3.2 of :rfc:`7230#section-3.2` supports extending
+        header values across multiple lines.  This parser should
+        follow the parsing of a header value and will adjust the
+        parse stack if the line starts with a linear whitespace
+        character.  After the folded header value is parsed, the
+        :meth:`._fold_header_values` parser will fold the values
+        back together.
+
+        :param bytes data: buffer to parse
+        :return: the bytes remaining in ``data`` after parsing
+
+        """
+        if not data.startswith((b' ', b'\t')):
+            self._pop_parser()
+            return data
+
+        self._unshift_parsers(
+            self.skip_linear_whitespace,
+            self.parse_header_value,
+            self._skip_single_character(b'\r'),
+            self._skip_single_character(b'\n'),
+            self._fold_header_values,
+            self._parse_folded_header_value,
+        )
+        return data
+
+    def _fold_header_values(self, data):
+        """Coalesce a folded header value."""
+        self._pop_parser()
+        if self._tokens[-1] is SENTINEL_TOKEN:
+            self._tokens.pop()
+        folded = self._tokens.pop()
+        self._append_to_token(b' ')
+        self._append_to_token(folded)
+        self._terminate_current_token()
+        return data
 
     def _collapse_http_version(self, data):
         """Collapse HTTP version tokens into a single token."""

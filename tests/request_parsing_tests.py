@@ -84,3 +84,15 @@ class WhenHeadersAreParsed(unittest.TestCase):
             (('Another-Header', b'second value'), {}),
         ])
         self.assertEqual(self.headers_are_finished, True)
+
+    def test_that_folded_headers_are_properly_parsed(self):
+        self.parser.feed(b'Header: first line ends here ><\r\n')
+        self.parser.feed(b' second line ends here ><\r\n')
+        self.parser.feed(b'\t\t\tthird line ends here ><\r\n')
+        self.parser.feed(b'\r\n')
+
+        self.assertEqual(self.headers, [
+            (('Header',
+              b'first line ends here >< second line ends here >'
+              b'< third line ends here ><'), {}),
+        ])
