@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sphinx_rtd_theme
+import alabaster
 
 from jester import __version__, version_info
 
 
 project = 'jester'
-copyright = '2014, Dave Shawley'
+copyright = '2016, Dave Shawley'
 version = __version__
 release = '.'.join(str(x) for x in version_info[:2])
 
@@ -22,8 +22,23 @@ source_suffix = '.rst'
 source_encoding = 'utf-8-sig'
 master_doc = 'index'
 pygments_style = 'sphinx'
-html_theme = 'sphinx_rtd_theme'
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_theme = 'alabaster'
+html_theme_path = [alabaster.get_path()]
+html_theme_options = {
+    'github_user': 'dave-shawley',
+    'github_repo': 'jester',
+    'github_banner': True,
+    'description': 'Async HTTP Engine',
+    'fixed_sidebar': True,
+}
+html_sidebars = {
+    '**': [
+        'about.html',
+        'navigation.html',
+        'relations.html',
+        'searchbox.html',
+    ]
+}
 html_static_path = []
 exclude_patterns = []
 

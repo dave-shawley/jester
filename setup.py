@@ -1,29 +1,27 @@
-import codecs
+#!/usr/bin/env python
+#
+
 import setuptools
 import sys
 
 from jester import __version__
 
 
-def read_requirements_file(name):
+def read_requirements(name):
+    requirements = []
     try:
         with open(name) as req_file:
-            return [line[0:line.index('#')] if '#' in line else line
-                    for line in req_file]
+            for line in req_file:
+                if '#' in line:
+                    line = line[:line.index('#')]
+                line = line.strip()
+                if line.startswith('-r'):
+                    requirements.extend(read_requirements(line[2:].strip()))
+                elif line and not line.startswith('-'):
+                    requirements.append(line)
     except IOError:
         pass
-
-
-install_requirements = read_requirements_file('requirements.txt')
-test_requirements = read_requirements_file('test-requirements.txt')
-if sys.version_info < (2, 7):
-    test_requirements.append('unittest2')
-if sys.version_info < (3, ):
-    test_requirements.append('mock>1.0,<2')
-
-
-with codecs.open('README.rst', 'rb', encoding='utf-8') as file_obj:
-    long_description = '\n' + file_obj.read()
+    return requirements
 
 
 setuptools.setup(
@@ -33,18 +31,20 @@ setuptools.setup(
     author_email='daveshawley@gmail.com',
     url='http://github.com/dave-shawley/jester',
     description='Asynchronous HTTP request handler',
-    long_description=long_description,
-    packages=setuptools.find_packages(exclude=['tests', 'tests.*']),
+    long_description='\n'+open('README.rst').read(),
+    packages=['jester'],
     zip_safe=True,
     platforms='any',
-    install_requires=install_requirements,
+    install_requires=read_requirements('requirements.txt'),
+    tests_require=read_requirements('test-requirements.txt'),
     test_suite='nose.collector',
-    tests_require=test_requirements,
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
         'Development Status :: 1 - Planning',
     ],
 )
