@@ -1,4 +1,8 @@
 import collections
+import logging
+
+
+_logger = logging.getLogger(__name__)
 
 
 def _normalize_header_name(key):
@@ -76,3 +80,89 @@ class Headers(collections.UserDict):
             self[name] = self[name] + ',' + str(value)
         except KeyError:
             self[name] = value
+
+
+class HTTPResponse(object):
+    """
+    Response to the current request.
+
+    :param asyncio.streams.StreamWriter writer:
+
+    """
+
+    def __init__(self, writer):
+        super(HTTPResponse, self).__init__()
+        self.logger = _logger.getChild('HTTPResponse')
+        self.headers = Headers()
+        self.status_line_sent = False
+        self._body_started = False
+        self._writer = writer
+
+    def add_header(self, name, value):
+        """
+        Add a header to the response.
+
+        :param str name:
+        :param str value:
+
+        """
+        if not self.status_line_sent:
+            try:
+                self.headers[name] = self.headers[name] + ', ' + value
+            except KeyError:
+                self.headers[name] = value
+        elif not self._body_started:
+            self._writer.write('{}: {}\r\n'.format(name, value))
+        else:
+            self.logger.warning('failed to add header %s value %s, header '
+                                'values cannot be sent after body is started',
+                                name, value)
+
+    def set_header(self, name, value):
+        """
+        Overwrite a header value.
+
+        :param str name:
+        :param str value:
+
+        """
+        if not self.status_line_sent:
+            self.headers[name] = value
+        elif not self._body_started:
+            self._writer.write('{}: {}\r\n'.format(name, value))
+        else:
+            self.logger.warning('failed to set header %s to %s, header '
+                                'values cannot be sent after body is started',
+                                name, value)
+
+    def send_status(self, status, reason):
+        """
+        Send the status line.
+
+        :param int status:
+        :param str reason:
+
+        """
+        if self.status_line_sent:
+            self.logger.error('status line already sent in send_status(%s,%s)',
+                              status, reason)
+            return
+
+        self._writer.write('HTTP/1.1 {} {}\r\n'.format(status, reason))
+        self.status_line_sent = True
+        for name, value in self.headers.items():
+            self.add_header(name, value)
+
+    def send_body_content(self, chunk):
+        """
+        Send response body.
+
+        :param str chunk:
+
+        """
+        if not self.status_line_sent:
+            self.send_status(200, 'OK')
+        if not self._body_started:
+            self._writer.write('\r\n')
+            self._body_started = True
+        self._writer.write(chunk)
