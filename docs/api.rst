@@ -3,5 +3,10 @@ API Reference
 
 Data Structures
 ---------------
-.. autoclass:: jester.datastructures.Headers
+.. automodule:: jester.datastructures
+   :members:
+
+Errors
+------
+.. automodule:: jester.exceptions
    :members:
