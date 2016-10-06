@@ -1,6 +1,8 @@
 import collections
 import logging
 
+from jester import exceptions, syntax
+
 
 _logger = logging.getLogger(__name__)
 
@@ -80,6 +82,112 @@ class Headers(collections.UserDict):
             self[name] = self[name] + ',' + str(value)
         except KeyError:
             self[name] = value
+
+
+class HTTPRequest(object):
+    """
+    Request as it is being processed.
+
+    :param str method: the incoming HTTP method
+    :param str resource: the resource portion of the HTTP request line
+    :param str http_version: the version portion of the HTTP request line
+
+    A ``HTTPRequest`` instance captures all of the details about the
+    incoming request as well as having methods to read the request from
+    the input stream.
+
+    .. attribute:: method
+
+       The requested HTTP method.  This value is not restricted to the
+       well-known set of HTTP methods so you must be prepared to handle
+       custom method names.
+
+    .. attribute:: resource
+
+       The resource portion of the request line.  This value is not
+       restricted in any way.
+
+    .. attribute:: http_version
+
+       The HTTP version that governs the request.  This value is not
+       restricted in any way.
+
+    .. attribute:: headers
+
+       :class:`~jester.datastructures.Headers` instance containing
+       the incoming headers.  This attribute is initially empty and
+       populated by the :meth:`read_headers` method.
+
+    """
+
+    def __init__(self, method, resource, http_version):
+        super(HTTPRequest, self).__init__()
+        self.logger = _logger.getChild('HTTPRequest')
+        self.method = method
+        self.resource = resource
+        self.http_version = http_version
+        self.headers = Headers()
+
+    async def read_headers(self, reader):
+        """
+        Read HTTP headers from `reader`.
+
+        :param asyncio.streams.StreamReader reader: stream to read
+            the header segment from
+
+        This method repeatedly reads lines from `reader`, parses them
+        into name and value, and adds them to the :attr:`headers`
+        collection.  If a line cannot be processed as a header, then
+        a :exc:`~jester.exceptions.ProtocolViolation` exception is
+        raised.
+
+        :raises jester.exceptions.ProtocolViolation: if a request line
+            cannot be parsed as a HTTP header.
+
+        """
+        while True:
+            # TODO need to handle timeouts in some sensible way.
+            # StreamReader.readline will block until a LF is received.
+            line = await reader.readline()
+            line = line.rstrip(b'\r\n')
+            if not line:  # headers done
+                break
+
+            name, sep, value = line.partition(b':')
+            self.logger.debug('parsed: %r %r %r', name, sep, value)
+            if sep != b':':  # missing separator
+                raise exceptions.ProtocolViolation(400, 'Malformed header')
+            if name.endswith((b' ', b'\t')):  # illegal whitespace
+                # RFC7230 3.2.4 - No whitespace is allowed between the
+                # header field-name and colon. ... A server MUST reject
+                # any received request message that contains whitespace
+                # between a header field-name and colon with a response
+                # code of 400 (Bad Request)
+                raise exceptions.ProtocolViolation(
+                    400, 'Illegal header syntax')
+
+            # RFC7230 3.2.4 - A field value may be preceded and/or
+            # followed by optional whitespace ... OWS occurring before the
+            # first non-whitespace octet of the field value or after the
+            # last non-whitespace octet of the field value ought to be
+            # excluded by parsers when extracting the field value
+            value = value.strip()
+
+            try:
+                name = name.decode('ASCII')
+                value = value.decode('ASCII')
+            except Exception:
+                # RFC7230 uses <token> as <field-name> which is limited
+                # to a strict subset of ASCII characters.  <field-value>
+                # is also limited to visual ASCII characters.
+                self.logger.exception('Non-ASCII header "%r: %r"',
+                                      name, value)
+                raise exceptions.ProtocolViolation(400, 'Non-ASCII Header')
+
+            if any(c not in syntax.TCHARS for c in name):
+                raise exceptions.ProtocolViolation(
+                    400, 'Illegal token characters')
+            self.headers[name] = value
 
 
 class HTTPResponse(object):

@@ -1,7 +1,9 @@
+import asyncio
 import unittest
 import unittest.mock
 
-from jester import datastructures
+from jester import datastructures, exceptions
+from tests import helpers
 
 
 class HeaderTests(unittest.TestCase):
@@ -105,3 +107,49 @@ class HTTPResponseTests(unittest.TestCase):
                           unittest.mock.call('\r\n'),
                           unittest.mock.call('foo'),
                           unittest.mock.call('bar')])
+
+
+class HTTPRequestTests(helpers.AsyncioTestCase):
+
+    def setUp(self):
+        super(HTTPRequestTests, self).setUp()
+        self.reader = asyncio.StreamReader(loop=self.loop)
+        self.request = datastructures.HTTPRequest('GET', '/', 'HTTP/1.1')
+
+    def test_that_headers_are_read(self):
+        self.reader.feed_data(b'Header: value\r\n'
+                              b'\r\n')
+        self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(self.request.headers['Header'], 'value')
+
+    def test_that_whitespace_before_colon_fails(self):
+        self.reader.feed_data(b'Header : value\r\n')
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(context.exception.status_code, 400)
+
+    def test_that_non_ascii_header_name_fails(self):
+        self.reader.feed_data(
+            ('\u0443\u0434\u0430\u0440-\u0433\u043e\u043b\u043e\u0432'
+             '\u043e\u0439: Value\r\n').encode('utf-8'))
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(context.exception.status_code, 400)
+
+    def test_that_cr_is_optional(self):
+        self.reader.feed_data(b'One: 1\nTwo: 2\n\n')
+        self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(self.request.headers['One'], '1')
+        self.assertEqual(self.request.headers['Two'], '2')
+
+    def test_that_missing_colon_fails(self):
+        self.reader.feed_data(b'Header value\r\n\r\n')
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(context.exception.status_code, 400)
+
+    def test_that_invalid_header_name_characters_are_rejected(self):
+        self.reader.feed_data(b'<Name>: value\r\n\r\n')
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(self.request.read_headers(self.reader))
+        self.assertEqual(context.exception.status_code, 400)
