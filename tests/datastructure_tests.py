@@ -40,7 +40,7 @@ class HTTPResponseTests(unittest.TestCase):
     def setUp(self):
         super(HTTPResponseTests, self).setUp()
         self.writer = unittest.mock.Mock()
-        self.response = datastructures.HTTPResponse(self.writer)
+        self.response = datastructures.HTTPResponse(self.writer.write)
 
     def test_that_headers_are_sent_with_status(self):
         self.response.set_header('one', '1')
@@ -52,12 +52,12 @@ class HTTPResponseTests(unittest.TestCase):
         self.assertEqual(self.writer.write.call_count, 4)
 
         self.assertEqual(self.writer.write.mock_calls[0],
-                         unittest.mock.call('HTTP/1.1 200 what ev\r\n'))
-        self.assertIn(unittest.mock.call('One: 1\r\n'),
+                         unittest.mock.call(b'HTTP/1.1 200 what ev\r\n'))
+        self.assertIn(unittest.mock.call(b'One: 1\r\n'),
                       self.writer.write.mock_calls)
-        self.assertIn(unittest.mock.call('2: two\r\n'),
+        self.assertIn(unittest.mock.call(b'2: two\r\n'),
                       self.writer.write.mock_calls)
-        self.assertIn(unittest.mock.call('Tres: 3\r\n'),
+        self.assertIn(unittest.mock.call(b'Tres: 3\r\n'),
                       self.writer.write.mock_calls)
 
     def test_that_add_header_appends_values(self):
@@ -76,14 +76,14 @@ class HTTPResponseTests(unittest.TestCase):
         self.writer.write.reset_mock()
 
         self.response.add_header('One', 'two')
-        self.writer.write.assert_called_once_with('One: two\r\n')
+        self.writer.write.assert_called_once_with(b'One: two\r\n')
 
     def test_that_set_header_writes_after_status_is_sent(self):
         self.response.send_status(200, 'ok')
         self.writer.write.reset_mock()
 
         self.response.set_header('One', 'two')
-        self.writer.write.assert_called_once_with('One: two\r\n')
+        self.writer.write.assert_called_once_with(b'One: two\r\n')
 
     def test_that_headers_cannot_be_added_after_starting_body(self):
         self.response.send_status(200, 'Bah')
@@ -97,16 +97,16 @@ class HTTPResponseTests(unittest.TestCase):
     def test_that_status_can_only_be_sent_once(self):
         self.response.send_status(200, 'Reason')
         self.response.send_status(500, 'Fail')
-        self.writer.write.assert_called_once_with('HTTP/1.1 200 Reason\r\n')
+        self.writer.write.assert_called_once_with(b'HTTP/1.1 200 Reason\r\n')
 
     def test_that_okay_status_sent_with_body(self):
         self.response.send_body_content('foo')
         self.response.send_body_content('bar')
         self.assertEqual(self.writer.write.mock_calls,
-                         [unittest.mock.call('HTTP/1.1 200 OK\r\n'),
-                          unittest.mock.call('\r\n'),
-                          unittest.mock.call('foo'),
-                          unittest.mock.call('bar')])
+                         [unittest.mock.call(b'HTTP/1.1 200 OK\r\n'),
+                          unittest.mock.call(b'\r\n'),
+                          unittest.mock.call(b'foo'),
+                          unittest.mock.call(b'bar')])
 
 
 class HTTPRequestTests(helpers.AsyncioTestCase):

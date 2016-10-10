@@ -194,17 +194,17 @@ class HTTPResponse(object):
     """
     Response to the current request.
 
-    :param asyncio.streams.StreamWriter writer:
+    :param write_callback: function that writes bytes to the output
 
     """
 
-    def __init__(self, writer):
+    def __init__(self, write_callback):
         super(HTTPResponse, self).__init__()
         self.logger = _logger.getChild('HTTPResponse')
         self.headers = Headers()
         self.status_line_sent = False
         self._body_started = False
-        self._writer = writer
+        self.write_callback = write_callback
 
     def add_header(self, name, value):
         """
@@ -220,7 +220,7 @@ class HTTPResponse(object):
             except KeyError:
                 self.headers[name] = value
         elif not self._body_started:
-            self._writer.write('{}: {}\r\n'.format(name, value))
+            self._send_header(name, value)
         else:
             self.logger.warning('failed to add header %s value %s, header '
                                 'values cannot be sent after body is started',
@@ -237,7 +237,7 @@ class HTTPResponse(object):
         if not self.status_line_sent:
             self.headers[name] = value
         elif not self._body_started:
-            self._writer.write('{}: {}\r\n'.format(name, value))
+            self._send_header(name, value)
         else:
             self.logger.warning('failed to set header %s to %s, header '
                                 'values cannot be sent after body is started',
@@ -256,10 +256,10 @@ class HTTPResponse(object):
                               status, reason)
             return
 
-        self._writer.write('HTTP/1.1 {} {}\r\n'.format(status, reason))
+        self._write('HTTP/1.1 {} {}\r\n', status, reason)
         self.status_line_sent = True
         for name, value in self.headers.items():
-            self.add_header(name, value)
+            self._send_header(name, value)
 
     def send_body_content(self, chunk):
         """
@@ -271,6 +271,21 @@ class HTTPResponse(object):
         if not self.status_line_sent:
             self.send_status(200, 'OK')
         if not self._body_started:
-            self._writer.write('\r\n')
+            self._write('\r\n')
             self._body_started = True
-        self._writer.write(chunk)
+        self._write('{}', chunk)
+
+    def _write(self, datafmt, *args, **kwargs):
+        encoding = kwargs.pop('_encoding', 'ASCII')
+        payload = datafmt.format(*args, **kwargs)
+        if not isinstance(payload, (bytes, bytearray, memoryview)):
+            payload = payload.encode(encoding)
+
+        if self.write_callback is not None:
+            self.write_callback(payload)
+        else:
+            self.logger.warning('not writing %d bytes, write callback '
+                                'is not set', len(payload))
+
+    def _send_header(self, name, value):
+        self._write('{}: {}\r\n', name, value)
