@@ -72,7 +72,6 @@ class AsyncioTestCase(unittest.TestCase):
 
         self._timeout_handle = self.loop.call_later(self.async_test_timeout,
                                                     self.loop.stop)
-        # self._timeout_handle = None
         self.server = None
         self.server_addr, self.server_port = None, None
 

@@ -1,4 +1,4 @@
-import asyncio
+import asyncio.streams
 import unittest
 import unittest.mock
 
@@ -153,3 +153,109 @@ class HTTPRequestTests(helpers.AsyncioTestCase):
         with self.assertRaises(exceptions.ProtocolViolation) as context:
             self.run_async(self.request.read_headers(self.reader))
         self.assertEqual(context.exception.status_code, 400)
+
+
+class HTTPRequestBodyTests(helpers.AsyncioTestCase):
+
+    def test_that_content_length_body_bytes_are_read(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Content-Length: 11\r\n'
+                         b'Content-Type: text/plain\r\n'
+                         b'\r\nhello worldGET /next/request HTTP/1.1\r\n')
+        reader.feed_eof()
+
+        request = datastructures.HTTPRequest('POST', '/', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        self.run_async(request.read_content_body(reader))
+        self.assertEqual(request.body, b'hello world')
+
+        rest = self.run_async(reader.read())
+        self.assertEqual(rest, b'GET /next/request HTTP/1.1\r\n')
+
+    def test_that_chunked_transfer_encoding_is_supported(self):
+        msg = (b'Throwup on your pillow. Eat prawns daintily with a claw '
+               b'then lick paws clean wash down prawns with a lap of '
+               b'carnation milk then retire to the warmest spot on the couch '
+               b'to claw at the fabric before taking a catnap. So if it '
+               b'fits, I sits yet stare at wall turn and meow stare at wall '
+               b'some more meow again continue staring. '
+               b'Make muffins peer out window, chatter at birds, lure them '
+               b'to mouth. Where is my slave? I\'m getting hungry. Purr '
+               b'while eating destroy the blinds so cat snacks, or sweet '
+               b'beast, for go into a room to decide you didn\'t want to be '
+               b'in there anyway eat owner\'s food.')
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Transfer-Encoding: chunked\r\n'
+                         b'Content-Type: text/plain\r\n'
+                         b'\r\n')
+        offset = 0
+        for chunk_size in (20, 90, 42, 290):
+            reader.feed_data('{:x}\r\n'.format(chunk_size).encode('ascii'))
+            reader.feed_data(msg[offset:offset+chunk_size])
+            offset += chunk_size
+        reader.feed_data('{:x}\r\n'.format(len(msg) - offset).encode('ascii'))
+        reader.feed_data(msg[offset:])
+        reader.feed_data(b'0\r\n')
+
+        request = datastructures.HTTPRequest('POST', '/catipsum', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        self.run_async(request.read_content_body(reader))
+        self.assertEqual(request.body, msg)
+
+    def test_that_zero_length_body_supported(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Content-Length: 0\r\n\r\n'
+                         b'GET /next/request HTTP/1.1\r\n')
+        reader.feed_eof()
+
+        request = datastructures.HTTPRequest('POST', '/doit', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        self.run_async(request.read_content_body(reader))
+
+        self.assertEqual(request.body, b'')
+        self.assertEqual(self.run_async(reader.read()),
+                         b'GET /next/request HTTP/1.1\r\n')
+
+    def test_that_unspecified_length_reads_until_eof(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Content-Type: text/plain\r\n'
+                         b'\r\n'
+                         b'content body')
+        reader.feed_eof()
+
+        request = datastructures.HTTPRequest('POST', '/', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        self.run_async(request.read_content_body(reader))
+        self.assertEqual(request.body, b'content body')
+
+    def test_that_incomplete_read_with_content_length_fails(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Content-Length: 100\r\n'
+                         b'\r\n'
+                         b'not anywhere near 100 bytes')
+        reader.feed_eof()
+
+        request = datastructures.HTTPRequest('POST', '/', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(request.read_content_body(reader))
+        self.assertIsNone(context.exception.status_code)
+        self.assertIsInstance(context.exception.__cause__, EOFError)
+
+    def test_that_incomplete_chunked_read_fails(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b'Content-Type: text/plain\r\n'
+                         b'Transfer-Encoding: chunked\r\n'
+                         b'\r\n'
+                         b'10\r\n'
+                         b'sixteen    bytes'
+                         b'30\r\n'
+                         b'fewer than 48 bytes without trailing zero')
+        reader.feed_eof()
+
+        request = datastructures.HTTPRequest('POST', '/', 'HTTP/1.1')
+        self.run_async(request.read_headers(reader))
+        with self.assertRaises(exceptions.ProtocolViolation) as context:
+            self.run_async(request.read_content_body(reader))
+        self.assertIsNone(context.exception.status_code)
+        self.assertIsInstance(context.exception.__cause__, EOFError)

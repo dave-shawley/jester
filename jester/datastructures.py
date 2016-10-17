@@ -1,5 +1,6 @@
 import collections
 import logging
+import urllib.parse
 
 from jester import exceptions, syntax
 
@@ -89,7 +90,7 @@ class HTTPRequest(object):
     Request as it is being processed.
 
     :param str method: the incoming HTTP method
-    :param str resource: the resource portion of the HTTP request line
+    :param str resource: the request_target portion of the HTTP request line
     :param str http_version: the version portion of the HTTP request line
 
     A ``HTTPRequest`` instance captures all of the details about the
@@ -102,7 +103,7 @@ class HTTPRequest(object):
        well-known set of HTTP methods so you must be prepared to handle
        custom method names.
 
-    .. attribute:: resource
+    .. attribute:: request_target
 
        The resource portion of the request line.  This value is not
        restricted in any way.
@@ -124,9 +125,11 @@ class HTTPRequest(object):
         super(HTTPRequest, self).__init__()
         self.logger = _logger.getChild('HTTPRequest')
         self.method = method
-        self.resource = resource
+        self.request_target = resource
         self.http_version = http_version
         self.headers = Headers()
+        self.url = urllib.parse.urlsplit(resource)
+        self.body = None
 
     async def read_headers(self, reader):
         """
@@ -188,6 +191,40 @@ class HTTPRequest(object):
                 raise exceptions.ProtocolViolation(
                     400, 'Illegal token characters')
             self.headers[name] = value
+
+    async def read_content_body(self, reader):
+        """
+
+        :param asyncio.streams.StreamReader reader: stream to read
+            the body from
+
+        :raises: jester.exceptions.ProtocolViolation
+
+        """
+        try:
+
+            content_len = self.headers.get('Content-Length', None)
+            if content_len is not None:
+                self.body = await reader.readexactly(int(content_len))
+                return
+
+            transfer_encoding = self.headers.get('Transfer-Encoding', None)
+            if transfer_encoding == 'chunked':
+                chunks = []
+                while True:
+                    chunk_size = await reader.readline()
+                    chunk_size = int(chunk_size.decode('ascii'), base=16)
+                    if chunk_size == 0:
+                        break
+                    buf = await reader.readexactly(chunk_size)
+                    chunks.append(buf)
+                self.body = b''.join(chunks)
+                return
+
+            self.body = await reader.read()
+
+        except EOFError as error:
+            raise exceptions.ProtocolViolation from error
 
 
 class HTTPResponse(object):
